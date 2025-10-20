@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Parcel Updates</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-gray-50 text-gray-900">
+
+  <main class="max-w-3xl mx-auto p-6">
+    <h1 class="text-3xl font-bold mb-6">Add Parcel Update</h1>
+
+    <form id="parcelUpdateForm" class="space-y-6">
+
+      <!-- Required -->
+      <div class="space-y-4 bg-gray-100 p-4 rounded-lg shadow">
+        <h2 class="text-lg font-semibold">Required</h2>
+
+        <!-- Parcel -->
+        <div>
+          <label class="block text-sm font-medium mb-1">Parcel</label>
+          <select id="parcel_id" name="parcel_id" required
+            class="w-full rounded border p-2">
+            <option value="">Select Parcel</option>
+          </select>
+        </div>
+
+        <!-- Courier -->
+        <div>
+          <label class="block text-sm font-medium mb-1">Courier</label>
+          <select id="courier_id" name="courier_id" required
+            class="w-full rounded border p-2">
+            <option value="">Select Courier</option>
+          </select>
+        </div>
+
+        <!-- Status -->
+        <div>
+          <label class="block text-sm font-medium mb-1">Status</label>
+          <select id="status" name="status" required
+            class="w-full rounded border p-2">
+            <option value="">Select Status</option>
+            <option>Picked Up</option>
+            <option>In Transit</option>
+            <option>Sorting</option>
+            <option>Out for Delivery</option>
+            <option>Delivered</option>
+            <option>Failed Delivery</option>
+            <option>Returned to Sender</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Optional -->
+      <div class="space-y-4 bg-gray-50 p-4 rounded-lg shadow">
+        <h2 class="text-lg font-semibold">Optional</h2>
+
+        <div>
+          <label class="block text-sm font-medium mb-1">Location</label>
+          <input type="text" id="location" name="location" class="w-full rounded border p-2" />
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium mb-1">Latitude</label>
+            <input type="number" step="any" id="latitude" name="latitude"
+              class="w-full rounded border p-2" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Longitude</label>
+            <input type="number" step="any" id="longitude" name="longitude"
+              class="w-full rounded border p-2" />
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-1">Courier Notes</label>
+          <textarea id="courier_notes" name="courier_notes"
+            class="w-full rounded border p-2"></textarea>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-1">Admin Notes</label>
+          <textarea id="admin_notes" name="admin_notes"
+            class="w-full rounded border p-2"></textarea>
+        </div>
+      </div>
+
+      <!-- Submit -->
+      <button type="submit"
+        class="px-4 py-2 bg-blue-600 text-white rounded shadow hover:bg-blue-700">
+        Save Update
+      </button>
+    </form>
+
+    <!-- Message -->
+    <p id="formMessage" class="mt-4 text-sm"></p>
+  </main>
+
+  <script>
+    const SUPABASE_URL = "https://ehupnvkselcupxqyofzy.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_cNXTZmBrYiYvd8SOI2ZGkQ_sWHLy_uf";
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+      auth: { persistSession: true }
+    });
+
+    async function loadParcelAndCourierOptions() {
+      // Load parcels
+      const { data: parcels, error: parcelError } = await supabaseClient
+        .from("parcels")
+        .select("id, tracking_code");
+      if (parcelError) console.error(parcelError);
+      const parcelSelect = document.getElementById("parcel_id");
+      parcels?.forEach(p => {
+        let opt = document.createElement("option");
+        opt.value = p.id;
+        opt.textContent = p.tracking_code;
+        parcelSelect.appendChild(opt);
+      });
+
+      // Load couriers
+      const { data: couriers, error: courierError } = await supabaseClient
+        .from("couriers")
+        .select("id, name");
+      if (courierError) console.error(courierError);
+      const courierSelect = document.getElementById("courier_id");
+      couriers?.forEach(c => {
+        let opt = document.createElement("option");
+        opt.value = c.id;
+        opt.textContent = c.name;
+        courierSelect.appendChild(opt);
+      });
+    }
+
+    // Handle submit
+    document.getElementById("parcelUpdateForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const formMessage = document.getElementById("formMessage");
+
+      const formData = {
+        parcel_id: document.getElementById("parcel_id").value,
+        courier_id: document.getElementById("courier_id").value,
+        status: document.getElementById("status").value,
+        location: document.getElementById("location").value || null,
+        latitude: document.getElementById("latitude").value || null,
+        longitude: document.getElementById("longitude").value || null,
+        courier_notes: document.getElementById("courier_notes").value || null,
+        admin_notes: document.getElementById("admin_notes").value || null,
+      };
+
+      const { data, error } = await supabaseClient
+        .from("parcel_updates")
+        .insert([formData]);
+
+      if (error) {
+        formMessage.textContent = "❌ Error: " + error.message;
+        formMessage.className = "mt-4 text-sm text-red-600";
+      } else {
+        formMessage.textContent = "✅ Parcel update saved!";
+        formMessage.className = "mt-4 text-sm text-green-600";
+        e.target.reset();
+      }
+    });
+
+    // Run on page load
+    loadParcelAndCourierOptions();
+  </script>
+</body>
+</html>

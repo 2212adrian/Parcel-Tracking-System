@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - J&T Tracking</title>
+
+  <!-- Tailwind CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link href="loading.css" rel="stylesheet">
+  <!-- Supabase JS -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
+  <script defer src="main.js"></script>
+
+  <style>
+    body {
+      background:  url('assets/Poster-Admin.png') no-repeat center top 40% fixed;
+      background-size: cover;
+      font-family: 'Inter', sans-serif;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-color: rgba(223, 223, 223, 0.8); /* black overlay, 40% opacity */
+      z-index: -1; /* behind all content */
+    }
+
+    header { background-color: #e70014; }
+
+    #appContent { opacity: 0; transition: opacity 0.7s; }
+
+    .login-card { transform: translateY(30px); opacity: 0; transition: all 0.8s ease-out; }
+    .login-card.show { transform: translateY(0); opacity: 1; }
+
+    .btn-red { background-color: #e70014; transition: all 0.3s ease; }
+    .btn-red:hover { background-color: #bf0011; transform: scale(1.03); }
+
+    input:focus { border-color: #e70014; box-shadow: 0 0 0 2px rgba(231, 0, 20, 0.2); outline: none; }
+
+    input.error { border-color: #e70014; box-shadow: 0 0 0 2px rgba(231,0,20,0.3); }
+
+    /* Loading overlay */
+    #loadingOverlay {
+      position: fixed; inset: 0;
+      background: white; display: flex;
+      flex-direction: column; justify-content: center;
+      align-items: center; transition: opacity 0.7s; z-index: 9999;
+    }
+
+    /* Floating icons animation */
+    .floating-icon { position: absolute; width: 40px; opacity: 0.1; animation: float 6s ease-in-out infinite; }
+    @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-15px); } }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col relative overflow-hidden">
+
+  <!-- Loading Overlay -->
+  <div id="loadingOverlay">
+    <img src="assets/JT_Express_Latest.png" alt="Logo" class="w-32 pb-10 sm:w-48 md:w-64 mb-4 animate-bounce">
+    <div class="loader"></div>
+    <p class="mt-4 text-gray-700 font-semibold text-sm sm:text-base">Loading...</p>
+  </div>
+
+  <!-- App Content -->
+  <div id="appContent" class="flex-1 flex flex-col">
+
+    <!-- Header -->
+    <header class="bg-[#e70014] h-12 sm:h-14 md:h-16 text-white px-2 sm:px-4 md:px-6 shadow flex items-center justify-center relative">
+      <img src="assets/JT_Express_Logo_invert.jpg" class="w-16 sm:w-16 md:w-20 absolute left-2 sm:left-4 md:left-6 -translate-y-1/2">
+      <p class="text-[8px] sm:text-sm md:text-sm lg:text-base text-gray-100 font-semibold mt-1">Manage parcels, track deliveries, and oversee branch operations</p>
+      <div class="absolute right-2 sm:right-4 md:right-6 -translate-y-1/2 flex gap-1 sm:gap-2">
+        <a href="ParcelWeb.html" class="bg-white text-red-600 px-2 sm:px-3 md:px-4 py-1 sm:py-2 rounded-md hover:bg-gray-100 font-semibold text-[10px] sm:text-xs md:text-sm lg:text-base">
+          Go Back &gt;&gt;&gt;
+        </a>
+      </div>
+    </header>
+
+    <!-- Login Form -->
+    <main class="flex flex-1 items-center justify-center p-4 relative z-10">
+      <div class="login-card bg-white shadow-2xl rounded-xl w-full max-w-md p-8 sm:p-10 md:p-12">
+        <h2 class="text-3xl font-bold text-red-600 text-center mb-6">Admin Login</h2>
+
+        <form id="loginForm" class="space-y-4">
+
+          <!-- Email / Phone -->
+          <div>
+            <label for="email" class="block text-sm font-medium text-gray-600 mb-1">
+              <span class="text-red-600">*</span> Phone number / Email
+            </label>
+            <input id="email" type="text" placeholder="Enter phone number/email"
+                   class="mt-1 w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-red-500 focus:border-red-500 transition">
+            <p id="emailError" class="text-xs text-red-600 mt-1 hidden">Please enter your phone/email</p>
+          </div>
+
+          <!-- Password with show/hide -->
+          <div class="relative">
+            <label for="password" class="block text-sm font-medium text-gray-600 mb-1">
+              <span class="text-red-600">*</span> Password
+            </label>
+            <input id="password" type="password" placeholder="Enter password"
+                   class="mt-1 w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-red-500 focus:border-red-500 transition">
+            <button type="button" onclick="togglePassword()" class="absolute right-2 top-9 text-gray-400 text-sm">👁️</button>
+            <p id="passwordError" class="text-xs text-red-600 mt-1 hidden">Please enter password</p>
+          </div>
+
+          <!-- Remember Me -->
+          <div class="flex items-center mt-2">
+            <input id="rememberMe" type="checkbox" class="mr-2">
+            <label for="rememberMe" class="text-sm text-gray-600">Remember me</label>
+          </div>
+
+          <!-- Login Button -->
+          <button id="loginButton" type="button" onclick="login()" class="w-full btn-red text-white font-semibold py-3 rounded-lg shadow-md hover:shadow-lg">
+            LOGIN
+          </button>
+
+          <!-- Auth Message -->
+          <div id="authMessage" class="mt-2 text-center text-red-600 text-sm sm:text-base"></div>
+
+          <!-- Forgot -->
+          <div class="flex justify-end text-sm text-gray-500 mt-1">
+            <a href="#" class="hover:underline">Forgot password?</a>
+          </div>
+        </form>
+      </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="text-center text-gray-500 text-xs mt-4 mb-2">
+      &copy; 2025 J&T Express. All rights reserved.
+    </footer>
+
+  </div>
+
+  <script>
+    // Toggle password visibility
+    function togglePassword() {
+      const pass = document.getElementById('password');
+      pass.type = pass.type === 'password' ? 'text' : 'password';
+    }
+
+    // Example login function placeholder
+    function login() {
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value.trim();
+      const authMsg = document.getElementById('authMessage');
+      authMsg.textContent = "";
+
+      // Basic validation
+      if (!email) { document.getElementById('emailError').classList.remove('hidden'); return; }
+      else { document.getElementById('emailError').classList.add('hidden'); }
+      if (!password) { document.getElementById('passwordError').classList.remove('hidden'); return; }
+      else { document.getElementById('passwordError').classList.add('hidden'); }
+
+      // TODO: Add Supabase login logic here
+      authMsg.textContent = "Logging in...";
+    }
+  </script>
+
+  <!-- Loader fade-out -->
+  <script>
+    window.addEventListener('load', () => {
+      document.getElementById('loadingOverlay').style.display = 'none';
+      document.getElementById('appContent').style.opacity = 1;
+      document.querySelector('.login-card').classList.add('show');
+    });
+  </script>
+</body>
+</html>

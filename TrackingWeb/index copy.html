@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>J&T Express - Parcel Tracking</title>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@700&family=Roboto:ital,wght@1,400&display=swap" rel="stylesheet">
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    #map {
+      width: 100%;
+      height: 300px;
+      border-radius: 12px;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body class="bg-gray-100 font-sans">
+
+  <!-- Loading Overlay -->
+  <div id="loadingOverlay" class="fixed z-[100] inset-0 bg-white flex flex-col items-center justify-center transition-opacity duration-700 opacity-100">
+    <img src="assets/JT_Express_Latest.png" alt="Logo" class="w-32 sm:w-48 md:w-64 pb-10 mb-4 animate-bounce">
+    <div class="loader"></div>
+    <p class="mt-4 text-gray-700 font-semibold">Loading...</p>
+  </div>
+
+  <!-- Role Selection Overlay -->
+  <div id="roleOverlay" class="fixed z-50 inset-0 bg-white/95 flex flex-col items-center justify-center transition-all duration-700 opacity-0 -translate-y-20 pointer-events-none">
+    <h2 class="text-2xl font-bold mb-8 text-gray-800 text-center">Select Your Role</h2>
+    <div class="flex flex-wrap justify-center gap-4">
+      <button id="overlayCustomerBtn" class="flex flex-col items-center text-xl sm:text-2xl px-6 sm:px-10 py-4 sm:py-6 rounded-xl bg-red-600 text-white font-bold shadow-lg hover:bg-red-700 transition">
+        <img src="assets/Customer.png" alt="Customer Icon" class="w-20 sm:w-24 h-20 sm:h-24 mb-2 sm:mb-3">
+        Customer
+      </button>
+      <button id="overlayCourierBtn" class="flex flex-col items-center text-xl sm:text-2xl px-6 sm:px-10 py-4 sm:py-6 rounded-xl bg-gray-700 text-white font-bold shadow-lg hover:bg-gray-900 transition">
+        <img src="assets/Courier.png" alt="Courier Icon" class="w-20 sm:w-24 h-20 sm:h-24 mb-2 sm:mb-3">
+        Courier
+      </button>
+    </div>
+  </div>
+
+  <!-- Main App Content -->
+  <div id="appContent" class="opacity-0 transition-opacity duration-700">
+
+    <!-- Header -->
+    <header class="bg-[#e70014] h-14 sm:h-16 text-white p-2 sm:p-4 shadow flex items-center justify-center relative">
+      <img src="assets/JT_Express_Logo_invert.jpg" class="w-24 sm:w-36 absolute left-2 sm:left-4 top-1/2 -translate-y-1/2" alt="Logo">
+      <h1 class="text-base sm:text-xl font-bold text-center w-full">Parcel Tracking</h1>
+      <div class="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 flex gap-2">
+        <a href="https://www.jtexpress.ph/" target="_blank" class="bg-white text-red-600 px-2 sm:px-4 py-1 sm:py-2 rounded-lg hover:bg-gray-100 font-semibold text-xs sm:text-base">
+          Go Back &gt;&gt;&gt;
+        </a>
+      </div>
+    </header>
+
+    <!-- Main -->
+    <main id="main" class="flex flex-col items-center justify-center min-h-[80vh] p-4">
+      <div id="mainContainer" class="bg-white rounded-2xl shadow-lg p-6 w-full max-w-md sm:max-w-lg md:max-w-xl lg:max-w-2xl">
+
+        <!-- User Type Buttons -->
+        <div class="flex flex-wrap justify-center gap-4 mb-4">
+          <button id="customerBtn" disabled class="px-4 py-2 rounded-lg bg-gray-200 text-gray-700 font-semibold flex-1 min-w-[120px] text-center">
+            Customer
+          </button>
+          <button id="courierBtn" disabled class="px-4 py-2 rounded-lg bg-gray-200 text-gray-700 font-semibold flex-1 min-w-[120px] text-center">
+            Courier
+          </button>
+        </div>
+
+        <!-- Tracking Input -->
+        <h2 class="text-lg font-semibold mb-4 text-gray-700 text-center">Enter Tracking ID</h2>
+        <div class="flex flex-wrap gap-2 mb-4">
+          <input id="trackingId" type="text" placeholder="Enter Tracking Number" class="flex-1 min-w-[200px] border rounded-lg px-3 py-2 focus:ring-2 focus:ring-red-400 outline-none">
+          <button id="updateBtn" onclick="trackParcel()" class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition flex-1 min-w-[100px]">
+            Track
+          </button>
+        </div>
+
+        <!-- Parcel Information -->
+        <div id="result" class="mt-6 hidden">
+
+          <!-- Courier Actions -->
+          <div id="courierInfo" class="flex flex-col bg-green-100 p-4 rounded-lg shadow mb-4 hidden">
+            <h4 class="font-semibold mb-2 text-gray-700">Courier Actions</h4>
+            <div id="geoToggleContainer" class="flex items-center gap-2 mb-2" style="display:none;">
+              <label for="geoToggle">Enable Live Location</label>
+              <input type="checkbox" id="geoToggle">
+            </div>
+            <label class="mb-2 block">
+              Status:
+              <select id="parcelStatus" class="border px-2 py-1 rounded w-full sm:w-auto">
+                <option value="Pending">Pending</option>
+                <option value="In Transit">In Transit</option>
+                <option value="Out for Delivery">Out for Delivery</option>
+                <option value="Delivered">Delivered</option>
+                <option value="Cancelled">Cancelled</option>
+              </select>
+            </label>
+            <div class="flex flex-wrap gap-2 mb-2">
+              <input type="number" id="parcelLat" placeholder="Latitude" step="0.000001" class="flex-1 min-w-[120px] border px-2 py-1 rounded">
+              <input type="number" id="parcelLng" placeholder="Longitude" step="0.000001" class="flex-1 min-w-[120px] border px-2 py-1 rounded">
+            </div>
+            <button id="updateStatusBtn" class="bg-gray-700 text-white px-3 py-1 rounded-lg w-full sm:w-auto">
+              Update Parcel
+            </button>
+          </div>
+
+          <!-- Parcel List -->
+          <div id="parcelList" class="mt-4"></div>
+
+          <!-- Map -->
+          <div id="map" class="mt-4 w-full max-w-full h-64 sm:h-80 rounded-lg"></div>
+
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script>
+const SUPABASE_URL = "https://ehupnvkselcupxqyofzy.supabase.co";
+const SUPABASE_KEY = "sb_publishable_cNXTZmBrYiYvd8SOI2ZGkQ_sWHLy_uf";
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let map, marker, subscription;
+let currentParcels = [];
+let geoWatchId = null;
+
+function setStaticInputsDisabled(disabled) {
+  document.getElementById("trackingId").disabled = disabled;
+  document.getElementById("updateBtn").disabled = disabled;
+  document.getElementById("parcelLat").disabled = disabled;
+  document.getElementById("parcelLng").disabled = disabled;
+  document.getElementById("parcelStatus").disabled = disabled;
+  document.getElementById("updateStatusBtn").disabled = disabled;
+}
+
+document.getElementById("updateStatusBtn").addEventListener("click", async function() {
+  if (!currentParcels.length) return alert("No parcels loaded");
+
+  for (let i = 0; i < currentParcels.length; i++) {
+    const lat = parseFloat(document.getElementById(`lat_${i}`).value);
+    const lng = parseFloat(document.getElementById(`lng_${i}`).value);
+    const status = document.getElementById(`statusSelect_${i}`).value;
+
+    if (isNaN(lat) || isNaN(lng)) return alert(`Invalid coordinates for parcel ${i+1}`);
+
+    const { data, error } = await supabaseClient
+      .from("parcels")
+      .update({ latitude: lat, longitude: lng, status })
+      .eq("id", currentParcels[i].id)
+      .select("*");
+
+    if (error) {
+      alert(`Failed to update parcel ${currentParcels[i].parcel_name || currentParcels[i].id}`);
+      continue;
+    }
+
+    // Update local data
+    currentParcels[i] = data[0];
+    document.getElementById(`status_${i}`).innerText = status;
+  }
+
+  alert("All parcels updated successfully!");
+});
+
+
+// Role selection overlay
+window.addEventListener('DOMContentLoaded', function() {
+  const appContent = document.getElementById('appContent');
+  const loadingOverlay = document.getElementById('loadingOverlay');
+  const roleOverlay = document.getElementById('roleOverlay');
+  const geoToggleContainer = document.getElementById("geoToggleContainer");
+
+  appContent.style.display = 'none';
+
+  setTimeout(() => {
+    loadingOverlay.classList.add('opacity-0');
+    setTimeout(() => {
+      loadingOverlay.style.display = 'none';
+      roleOverlay.style.display = 'flex';
+      roleOverlay.classList.remove('pointer-events-none', 'opacity-0', '-translate-y-20');
+      roleOverlay.classList.add('opacity-100', 'translate-y-0');
+    }, 700);
+  }, 1800);
+
+  function handleRoleSelect(selectedBtnId) {
+    roleOverlay.classList.remove('opacity-100', 'translate-y-0');
+    roleOverlay.classList.add('opacity-0', '-translate-y-20');
+
+    setTimeout(() => {
+      roleOverlay.style.display = 'none';
+      appContent.style.display = 'block';
+      const otherBtnId = selectedBtnId === 'customerBtn' ? 'courierBtn' : 'customerBtn';
+      document.getElementById(otherBtnId).style.display = 'none';
+      document.getElementById(selectedBtnId).style.display = 'inline-block';
+      setTimeout(() => {
+        appContent.classList.remove('opacity-0');
+        appContent.classList.add('opacity-100');
+      }, 50);
+
+      geoToggleContainer.style.display = selectedBtnId === "courierBtn" ? "flex" : "none";
+    }, 700);
+  }
+
+  document.getElementById('overlayCustomerBtn').addEventListener('click', () => {
+    window.selectedUserType = 'customer';
+    handleRoleSelect('customerBtn');
+  });
+  document.getElementById('overlayCourierBtn').addEventListener('click', () => {
+    window.selectedUserType = 'courier';
+    handleRoleSelect('courierBtn');
+  });
+
+  document.getElementById("geoToggle").addEventListener("change", function() {
+    if(this.checked){
+      if(navigator.geolocation){
+        setStaticInputsDisabled(true);
+        geoWatchId = navigator.geolocation.watchPosition(async pos => {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+
+          document.getElementById("parcelLat").value = lat;
+          document.getElementById("parcelLng").value = lng;
+
+          currentParcels.forEach((parcel, idx) => {
+            const latEl = document.getElementById(`lat_${idx}`);
+            const lngEl = document.getElementById(`lng_${idx}`);
+            if(latEl) latEl.value = lat;
+            if(lngEl) lngEl.value = lng;
+          });
+
+          for(const parcel of currentParcels){
+            await supabaseClient
+              .from("parcels")
+              .update({ latitude: lat, longitude: lng })
+              .eq("id", parcel.id);
+            parcel.latitude = lat;
+            parcel.longitude = lng;
+          }
+
+          if(map && marker && currentParcels.length){
+            const lastParcel = currentParcels[currentParcels.length-1];
+            animateMarker(marker, marker.getLatLng(), L.latLng(lastParcel.latitude, lastParcel.longitude), 1000);
+            map.setView([lastParcel.latitude, lastParcel.longitude], 13);
+          }
+        }, err => alert("Geolocation error: "+err.message), { enableHighAccuracy: true });
+      } else alert("Geolocation not supported in this browser");
+    } else {
+      if(geoWatchId !== null){
+        navigator.geolocation.clearWatch(geoWatchId);
+        geoWatchId = null;
+        setStaticInputsDisabled(false);
+      }
+    }
+  });
+});
+
+// Tracking parcels
+async function trackParcel() {
+  const secretId = document.getElementById("trackingId").value.trim();
+  if (!secretId) return alert("Enter Tracking ID");
+  if (!window.selectedUserType) return alert("Select Customer or Courier");
+
+  if(subscription) supabaseClient.removeChannel(subscription);
+
+  if(window.selectedUserType === "courier"){
+    const { data: updates, error: updatesError } = await supabaseClient
+      .from("parcel_updates")
+      .select("*")
+      .eq("secret_id", secretId);
+
+    if (updatesError || !updates.length) return alert("No updates found for this Secret ID");
+
+    const parcelIds = updates.map(u => u.id);
+    const { data: parcels, error: parcelsError } = await supabaseClient
+      .from("parcels")
+      .select("*")
+      .in("connect_parcel", parcelIds);
+
+    if(parcelsError || !parcels.length) return alert("No parcels linked");
+
+    currentParcels = parcels;
+    document.getElementById("courierInfo").style.display = "block";
+    displayParcels(parcels);
+  } else {
+    const { data: parcel, error } = await supabaseClient
+      .from("parcels")
+      .select("*")
+      .eq("public_id", secretId)
+      .maybeSingle();
+
+    if(error || !parcel) return alert("Parcel not found");
+    currentParcels = [parcel];
+    displayParcels([parcel]);
+  }
+}
+
+// Display parcels with toggleable details
+function displayParcels(parcels){
+  const parcelList = document.getElementById("parcelList");
+  parcelList.innerHTML = "";
+
+  const isCourier = window.selectedUserType === "courier";
+  document.getElementById("courierInfo").style.display = isCourier ? "block" : "none";
+
+  parcels.forEach((parcel, idx) => {
+    const div = document.createElement("div");
+    div.className = "mb-2 p-2 bg-gray-100 rounded shadow relative";
+
+    div.innerHTML = `
+      <div class="flex justify-between items-center">
+        <p><strong>Parcel Name:</strong> ${parcel.parcel_name || "N/A"}</p>
+        ${isCourier ? `<button id="toggle_${idx}" class="bg-blue-600 text-white px-2 py-1 rounded text-sm">Show Details</button>` : ""}
+      </div>
+      <div id="details_${idx}" class="mt-2 hidden p-2 bg-gray-50 rounded">
+        <p><strong>Status:</strong> <span id="status_${idx}">${parcel.status}</span></p>
+        <p><strong>Weight:</strong> ${parcel.weight || "-"}</p>
+        <p><strong>Dimension:</strong> ${parcel.dimension || "-"}</p>
+        <p><strong>Parcel Type:</strong> ${parcel.parcel_type || "-"}</p>
+        <p><strong>Sender Name:</strong> ${parcel.sender_name || "-"}</p>
+        <p><strong>Sender Address:</strong> ${parcel.sender_address || "-"}</p>
+        <p><strong>Sender Contact:</strong> ${parcel.sender_contact || "-"}</p>
+        <p><strong>Receiver Name:</strong> ${parcel.receiver_name || "-"}</p>
+        <p><strong>Receiver Address:</strong> ${parcel.receiver_address || "-"}</p>
+        <p><strong>Receiver Contact:</strong> ${parcel.receiver_contact || "-"}</p>
+        <div class="flex flex-wrap gap-2 mt-1">
+          <input type="number" id="lat_${idx}" placeholder="Latitude" step="0.000001" value="${parcel.latitude || 0}" class="flex-1 min-w-[120px] border px-2 py-1 rounded">
+          <input type="number" id="lng_${idx}" placeholder="Longitude" step="0.000001" value="${parcel.longitude || 0}" class="flex-1 min-w-[120px] border px-2 py-1 rounded">
+          <select id="statusSelect_${idx}" class="border px-2 py-1 rounded flex-1 min-w-[140px]">
+            <option value="Pending">Pending</option>
+            <option value="In Transit">In Transit</option>
+            <option value="Out for Delivery">Out for Delivery</option>
+            <option value="Delivered">Delivered</option>
+            <option value="Cancelled">Cancelled</option>
+          </select>
+          <button class="bg-gray-700 text-white px-2 py-1 rounded flex-1 min-w-[80px]" onclick="updateParcel(${idx})">Update</button>
+        </div>
+      </div>
+    `;
+    parcelList.appendChild(div);
+
+    const statusSelectEl = document.getElementById(`statusSelect_${idx}`);
+    if(statusSelectEl) statusSelectEl.value = parcel.status || "Pending";
+
+    const toggleBtn = document.getElementById(`toggle_${idx}`);
+    if(toggleBtn){
+      toggleBtn.addEventListener("click", ()=>{
+        const detailsDiv = document.getElementById(`details_${idx}`);
+        if(detailsDiv.classList.contains("hidden")){
+          detailsDiv.classList.remove("hidden");
+          toggleBtn.innerText = "Hide Details";
+        } else {
+          detailsDiv.classList.add("hidden");
+          toggleBtn.innerText = "Show Details";
+        }
+      });
+    }
+
+    const lat = parcel.latitude || 14.5995;
+    const lng = parcel.longitude || 120.9842;
+    if(!map){
+      map = L.map("map").setView([lat, lng], 13);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "© OpenStreetMap contributors" }).addTo(map);
+      marker = L.marker([lat, lng]).addTo(map);
+    } else {
+      animateMarker(marker, marker.getLatLng(), L.latLng(lat, lng), 1000);
+      map.setView([lat, lng], 13);
+    }
+    marker.bindPopup(`📍 ${parcel.status}`).openPopup();
+  });
+
+  document.getElementById("result").classList.remove("hidden");
+}
+
+// Update single parcel
+async function updateParcel(idx){
+  const parcel = currentParcels[idx];
+  const lat = parseFloat(document.getElementById(`lat_${idx}`).value) || 0;
+  const lng = parseFloat(document.getElementById(`lng_${idx}`).value) || 0;
+  const status = document.getElementById(`statusSelect_${idx}`).value;
+
+  await supabaseClient.from("parcels")
+    .update({ latitude: lat, longitude: lng, status })
+    .eq("id", parcel.id);
+
+  parcel.latitude = lat;
+  parcel.longitude = lng;
+  parcel.status = status;
+  document.getElementById(`status_${idx}`).innerText = status;
+
+  if(map && marker) animateMarker(marker, marker.getLatLng(), L.latLng(lat, lng), 1000);
+}
+
+// Smooth marker animation
+function animateMarker(marker, startLatLng, endLatLng, duration){
+  const startTime = performance.now();
+  function animate(time){
+    const elapsed = time - startTime;
+    const t = Math.min(1, elapsed/duration);
+    const lat = startLatLng.lat + (endLatLng.lat - startLatLng.lat)*t;
+    const lng = startLatLng.lng + (endLatLng.lng - startLatLng.lng)*t;
+    marker.setLatLng([lat, lng]);
+    if(t < 1) requestAnimationFrame(animate);
+  }
+  requestAnimationFrame(animate);
+}
+</script>
+</body>
+</html>

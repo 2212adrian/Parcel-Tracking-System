@@ -1,0 +1,999 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Dashboard - J&T Tracking</title>
+
+  <!-- Libs -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Tailwind (use CDN + runtime config so 'dark:' utilities work) -->
+  <script>
+    // Enable class-based dark mode for the CDN build
+    tailwind.config = {
+      darkMode: 'class'
+    };
+  </script>
+
+
+  <!-- Your CSS -->
+  <link rel="stylesheet" href="loading.css"/>
+
+  <style>
+    /* small helper for smooth color transitions */
+    .theme-transition { transition: background-color 220ms ease, color 220ms ease; }
+    #chat {
+flex-direction: column;
+  overflow-y: auto;
+  }
+
+.chat-message img {
+  width: 100%;         /* take full width of bubble */
+  height: auto;        /* keep aspect ratio */
+  max-height: 250px;   /* prevent it from being super tall */
+  object-fit: contain; /* keep full image inside bubble */
+  border-radius: 0.5rem;
+}
+
+.btn-red { background: #e70014; color: white; }
+    .btn-red:hover { background: #bf0011; }
+    .card { background: white; border-radius: 12px; box-shadow: 0 6px 20px rgba(0,0,0,0.06); }
+    pre { white-space: pre-wrap; word-break: break-word; }
+    .small-muted { font-size: .85rem; color: #6b7280; }
+
+    #addParcel.locked * {
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100 theme-transition">
+
+  <!-- Loading Overlay -->
+<div id="loadingOverlay" class="fixed z-[9999] inset-0 bg-white flex flex-col items-center justify-center transition-opacity duration-700 opacity-100">
+  <img src="assets/JT_Express_Latest.png" alt="Logo" class="w-32 pb-10 sm:w-48 md:w-64 mb-4 animate-bounce">
+  <div class="loader"></div>
+  <p class="mt-4 text-gray-700 font-semibold">Loading...</p>
+</div>
+
+  <!-- Mobile Top Bar -->
+  <header class="md:hidden sticky top-0 z-40 bg-white dark:bg-gray-800 shadow flex items-center justify-between px-4 py-3">
+    <button id="hamburger" class="bg-red-600 text-white px-3 py-2 rounded-lg focus:outline-none">☰</button>
+    <div class="flex items-center gap-2"><img src="assets/JT_Express_Latest.png" alt="J&T" class="h-6 object-contain"></div>
+    <span class="w-10"></span>
+  </header>
+
+  <!-- Main Content -->
+  <main id="appContent" class="dash-card opacity-0 transition-opacity duration-700 p-4 md:p-6 md:ml-64 min-h-screen overflow-y-auto">
+  <!-- Floating Buttons (Chat + Dark Mode) -->
+  <div class="fixed bottom-6 right-6 flex gap-3 z-[10]">
+    <!-- Chat Button -->
+    <button id="chatButton" class="w-14 h-14 rounded-full bg-red-600 text-white shadow-lg flex items-center justify-center text-2xl">💬</button>
+
+    <!-- Dark Mode Button -->
+     <button id="theme-toggle" class="px-3 py-2 rounded-md border border-gray-200 bg-gray-300 dark:bg-gray-800 dark:border-gray-700">
+        <span id="theme-label">🌙 Dark Mode</span>
+      </button>
+  </div>
+
+  <!-- Chat Modal -->
+  <div id="chatModal" class="fixed bottom-20 right-4 sm:right-6 w-full max-w-sm bg-[rgb(169,189,215)] dark:bg-gray-900 text-white rounded-xl shadow-lg border border-gray-700 flex flex-col hidden z-50 mx-4" style="max-height: 400px;">
+    <div class="bg-red-600 px-4 py-2 flex justify-between items-center rounded-t-xl"><span class="font-semibold">Admin Private Chat</span><button id="closeChat" class="text-white font-bold">×</button></div>
+    <div id="chat" class="flex-1 p-3 overflow-y-auto space-y-2"></div>
+    <div class="flex gap-2 p-3 border-t border-gray-700">
+      <!-- Plus button for image -->
+  <button id="fileBtn" class="p-2 rounded-full hover:bg-gray-200">
+    ➕
+  </button>
+  <input type="file" id="fileInput" accept="image/*" class="hidden" />
+
+  <!-- Text input -->
+<input
+  id="messageInput"
+  type="text"
+  placeholder="Type a message..."
+  class="flex-1 min-w-0 border rounded-lg px-3 py-2 text-gray-800 text-sm sm:text-base"
+/>
+  <!-- Send button -->
+  <button id="sendBtn" class="bg-red-500 text-white px-4 py-2 rounded-lg">
+    Send
+  </button>
+    </div>
+  </div>
+
+  <!-- Sidebar Backdrop -->
+  <div id="sidebarBackdrop" class="md:hidden fixed inset-0 bg-black bg-opacity-40 z-40 hidden dark:bg-gray-800"></div>
+
+  <!-- Sidebar -->
+<aside id="sidebar" class="fixed md:fixed inset-y-0 left-0 w-64 bg-gray-200 dark:bg-gray-800 shadow-lg z-50 transform -translate-x-full md:translate-x-0 transition-transform duration-300 flex flex-col">
+  <div style="background-color: #e70014;" class="p-4 border-b flex justify-center">
+    <img src="assets/JT_Express_Logo_invert.jpg" alt="J&T Logo" class="h-16 object-contain">
+  </div>
+  <nav class="flex-1 p-2 overflow-y-auto">
+    <hr class="border-t border-gray-300 dark:border-gray-600 my-4">
+    <p class="text-center" id="pBranch">Navotas Branch</p>
+    <hr class="border-t border-gray-300 dark:border-gray-600 my-4">
+
+    <button data-target="dashboard" class="navbtn w-full text-left px-4 py-2 rounded hover:bg-[rgb(190,190,190)] dark:hover:bg-gray-700">
+      1. Dashboard
+    </button>
+
+    <!-- Add Parcel Parent -->
+    <button id="toggleAddParcel" class="navbtn w-full text-left px-4 py-2 rounded hover:bg-[rgb(190,190,190)] dark:hover:bg-gray-700 flex justify-between items-center">
+      2. Parcel Management
+      <span id="addParcelArrow">▼</span>
+    </button>
+
+    <!-- Add Parcel Children (hidden by default) -->
+    <div id="addParcelMenu" class="ml-4 mt-1 hidden">
+      <button data-target="parcelTables" class="navbtn w-full text-left px-4 py-2 rounded hover:bg-gray-300 dark:hover:bg-gray-700">📄 View Tables</button>
+      <button data-target="addParcel" class="navbtn w-full text-left px-4 py-2 rounded hover:bg-gray-300 dark:hover:bg-gray-700">➕ Add Parcel</button>
+    </div>
+
+    <button data-target="deliverySession" class="navbtn w-full text-left px-4 py-2 rounded hover:bg-[rgb(190,190,190)] dark:hover:bg-gray-700">
+      3. Create Delivery Session
+    </button>
+    <button 
+  onclick="if(confirm('You are about to leave this dashboard and go to the Parcel Tracking site. Continue?')) { window.open('https://parcel-jtexpress.netlify.app/', '_blank'); }" 
+  class="navbtn w-full text-left px-4 py-2 rounded hover:bg-[rgb(190,190,190)] dark:hover:bg-gray-700">
+  4. Parcel Tracking
+</button>
+
+    <button data-target="settings" class="navbtn w-full text-left px-4 py-2 rounded hover:bg-[rgb(190,190,190)] dark:hover:bg-gray-700">
+      5. Settings
+    </button>
+  </nav>
+  <div class="p-4 border-t border-gray-300 dark:border-gray-700">
+    <p id="userEmail" class="text-sm text-gray-600 dark:text-gray-300 mb-2"></p>
+    <button id="logoutBtn" class="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-2 rounded-lg shadow-md transition">🚪 Logout</button>
+  </div>
+</aside>
+  
+
+    <!-- Dashboard -->
+    <section id="dashboard" class="page">
+    <h1 class="text-2xl font-bold mb-4">Dashboard</h1>
+    <p class="text-gray-700 dark:text-gray-300 mb-4" title="Summary of all parcels and performance charts">
+      This section provides a summary of all parcels, showing key metrics and performance charts. Click a metric to see more details.
+    </p>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div class="bg-white dark:bg-gray-800 p-4 shadow rounded-lg" title="Total number of parcels currently in the system">Total Parcels: <span id="totalParcels">120</span></div>
+      <div class="bg-white dark:bg-gray-800 p-4 shadow rounded-lg" title="Parcels currently in transit">In Transit: <span>45</span></div>
+      <div class="bg-white dark:bg-gray-800 p-4 shadow rounded-lg" title="Parcels that have been successfully delivered">Delivered: <span>70</span></div>
+      <div class="bg-white dark:bg-gray-800 p-4 shadow rounded-lg" title="Parcels experiencing delays">Delayed: <span>5</span></div>
+    </div>
+    <canvas id="performanceChart" class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow w-full" title="Graph showing parcel performance and delivery trends"></canvas>
+  </section>
+    
+    <section id="undefined" class="page hidden">
+    <div class="card p-6 dark:bg-gray-800 dark:border-gray-700">
+      <h2 class="text-2xl font-bold text-red-600 mb-2">Parcel Management</h2>
+      <p class="text-gray-700 dark:text-gray-300 leading-relaxed">
+        The <strong>Parcel Management</strong> module allows administrators to oversee the 
+        entire parcel lifecycle — from creation to delivery. Use the sidebar to navigate between functions.
+      </p>
+      <ul class="list-disc list-inside mt-3 text-gray-700 dark:text-gray-300 space-y-1">
+        <li><strong>📄 View Tables</strong> – Browse parcel records, customer details, couriers, and branches.</li>
+        <li><strong>➕ Add Parcel</strong> – Register a new parcel with tracking code, sender/receiver details, and delivery information.</li>
+        <li><strong>🔎 Row Details</strong> – Inspect a specific record with complete parcel metadata and history.</li>
+      </ul>
+       <div class="flex flex-col sm:flex-row justify-center gap-4 mt-6">
+      <!-- View Tables Shortcut -->
+      <button onclick="showPage('parcelTables')" 
+              class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-4 rounded-lg shadow-md transition"
+              title="Browse parcel records, customer details, couriers, and branches">
+        📄 View Tables
+      </button>
+
+      <!-- Add Parcel Shortcut -->
+      <button onclick="showPage('addParcel')" 
+              class="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold px-6 py-4 rounded-lg shadow-md transition"
+              title="Register a new parcel with tracking code, sender/receiver details, and delivery information">
+        ➕ Add Parcel
+      </button>
+    </div>
+    </div>
+  </section>
+
+
+
+    <section id="parcelTables" class="page hidden">
+      <h1 class="text-2xl font-bold mb-4">Parcel Tables</h1>
+      <p class="mb-4 text-gray-700 dark:text-gray-300">View and manage parcel data across different tables. Select a table and click a row to view detailed information below.</p>
+     
+      <header class="h-16 flex items-center justify-center text-white relative">
+    <h1 class="text-lg font-bold text-left">Parcel Manager — Display & Add</h1>
+    <div class="absolute right-4">
+      <button id="refreshAll" class="px-3 py-1 rounded bg-white text-red-600 font-semibold hover:bg-gray-100 dark:bg-gray-600 dark:border-gray-700">Refresh</button>
+    </div>
+  </header>
+
+      <!-- Table selector -->
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <label for="tableSelect" class="font-medium">Select table:</label>
+        <select id="tableSelect" class="border rounded px-3 py-2 dark:bg-gray-800 dark:border-gray-700">
+          <option value="parcels" selected>parcels</option>
+          <option value="customers">customers</option>
+          <option value="branches">branches</option>
+          <option value="couriers">couriers</option>
+          <option value="parcel_updates">parcel_updates</option>
+          <option value="admins">admins</option>
+        </select>
+      </div>
+      <div id="tableCount" class="small-muted"></div>
+    </div>
+
+    <!-- Table container -->
+    <section id="tableCard" class="card p-4 dark:bg-gray-800 dark:border-gray-700 mt-4">
+      <div id="tableContainer" class="overflow-x-auto"></div>
+    </section>
+
+    <!-- Parcel details / JSON viewer -->
+    <section class="card p-4 dark:bg-gray-800 dark:border-gray-700 mt-6">
+      <h3 class="font-semibold mb-2">Row Details</h3>
+      <pre id="rowDetails" class="p-3 bg-gray-50 rounded text-sm text-gray-800">Click a row to view details here.</pre>
+    </section>
+    </section>
+
+    <!-- Add Parcel -->
+    <section id="addParcel" class="page hidden locked relative">
+
+      <!-- Form loading overlay -->
+  <div id="addParcelOverlay" class="absolute inset-0 bg-white/70 dark:bg-gray-800/70 
+              flex items-center justify-center z-50 hidden">
+    <div class="text-center">
+      <div class="loader mx-auto mb-3"></div>
+      <p class="font-semibold">Loading form data...</p>
+    </div>
+  </div>
+
+    <!-- Add Parcel Form: Required / Optional -->
+    <section class="card p-6 dark:bg-gray-800 dark:border-gray-700">
+      <div class="flex items-start justify-between dark:bg-gray-800 dark:border-gray-700">
+        <div>
+          <h2 class="text-2xl font-bold text-red-600">➕ Add Parcel</h2>
+          <p class="small-muted mt-1 dark:text-white">
+            Required fields must be completed to add a parcel. Optional fields improve parcel tracking accuracy.
+          </p>
+        </div>
+        <div class="text-sm small-muted dark:text-white">
+          Status options: Pending, In Transit, Out for Delivery, Delivered, Returned, Cancelled
+        </div>
+      </div>
+
+      <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Required -->
+        <div class="border rounded p-4">
+          <h3 class="font-semibold text-red-600 mb-3">Required</h3>
+          <p class="text-sm text-gray-500 dark:text-gray-300 mb-3">Fields you must complete to register the parcel.</p>
+          <label class="block text-sm mb-1">Tracking Code *</label>
+          <div class="flex gap-2 mb-3">
+            <input id="tracking_code" class="flex-1 border rounded px-3 py-2 dark:bg-gray-800 dark:border-gray-700" placeholder="tracking_code (unique)" />
+            <button id="genTrackingCode" class="px-3 py-2 rounded bg-gray-100 dark:bg-gray-600 dark:border-gray-700">Generate</button>
+          </div>
+
+
+          <label class="block text-sm mb-1">Public ID *</label>
+          <div class="flex gap-2 mb-3">
+            <input id="public_id" class="flex-1 border rounded px-3 py-2 dark:bg-gray-800 dark:border-gray-700" placeholder="public_id (unique)" />
+            <button id="genPublicId" class="px-3 py-2 rounded bg-gray-100 dark:bg-gray-600 dark:border-gray-700">Generate</button>
+          </div>
+
+          <label class="block text-sm mb-1">Secret ID *</label>
+          <div class="flex gap-2 mb-3">
+            <input id="secret_id" class="flex-1 border rounded px-3 py-2 dark:bg-gray-800 dark:border-gray-700" placeholder="secret_id (unique)" />
+            <button id="genSecretId" class="px-3 py-2 rounded bg-gray-100 dark:bg-gray-600 dark:border-gray-700">Generate</button>
+          </div>
+
+          <label class="block text-sm mb-1">Sender (customer) *</label>
+          <select id="sender_id" class="w-full border rounded px-3 py-2 mb-3 dark:bg-gray-800 dark:border-gray-700"></select>
+
+          <label class="block text-sm mb-1">Receiver (customer) *</label>
+          <select id="receiver_id" class="w-full border rounded px-3 py-2 mb-3 dark:bg-gray-800 dark:border-gray-700"></select>
+        </div>
+
+        <!-- Optional -->
+        <div class="border rounded p-4">
+          <h3 class="font-semibold text-gray-700 mb-3 dark:text-white">Optional</h3>
+          <p class="text-sm text-gray-500 dark:text-gray-300 mb-3">Provide additional info for better parcel tracking.</p>
+          <label class="block text-sm mb-1">Parcel Name</label>
+          <input id="parcel_name" class="w-full border rounded px-3 py-2 mb-2 dark:bg-gray-800 dark:border-gray-700" />
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-sm mb-1">Weight (kg)</label>
+              <input id="weight" class="w-full border rounded px-3 py-2 mb-2 dark:bg-gray-800 dark:border-gray-700" />
+            </div>
+            <div>
+              <label class="block text-sm mb-1">Dimensions</label>
+              <input id="dimensions" class="w-full border rounded px-3 py-2 mb-2 dark:bg-gray-800 dark:border-gray-700" />
+            </div>
+          </div>
+
+          <label class="block text-sm mb-1">Parcel Type</label>
+          <input id="parcel_type" class="w-full border rounded px-3 py-2 mb-2 dark:bg-gray-800 dark:border-gray-700" placeholder="Express, Standard, Fragile..." />
+
+          <label class="block text-sm mb-1">Description</label>
+          <input id="parcel_description" class="w-full border rounded px-3 py-2 mb-2 dark:bg-gray-800 dark:border-gray-700" />
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-sm mb-1">Declared Value</label>
+              <input id="declared_value" class="w-full border rounded px-3 py-2 mb-2 dark:bg-gray-800 dark:border-gray-700" />
+            </div>
+            <div>
+              <label class="block text-sm mb-1">Insurance Amount</label>
+              <input id="insurance_amount" class="w-full border rounded px-3 py-2 mb-2 dark:bg-gray-800 dark:border-gray-700" />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-sm mb-1">Origin Branch</label>
+              <select id="origin_branch_id" class="w-full border rounded px-3 py-2 mb-2 dark:bg-gray-800 dark:border-gray-700"></select>
+            </div>
+            <div>
+              <label class="block text-sm mb-1">Destination Branch</label>
+              <select id="destination_branch_id" class="w-full border rounded px-3 py-2 mb-2 dark:bg-gray-800 dark:border-gray-700"></select>
+            </div>
+          </div>
+
+          <label class="block text-sm mb-1">Current Courier</label>
+          <select id="current_courier_id" class="w-full border rounded px-3 py-2 mb-2 dark:bg-gray-800 dark:border-gray-700"></select>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-sm mb-1">Expected Delivery Date</label>
+              <input id="expected_delivery_date" type="date" class="w-full border rounded px-3 py-2 mb-2 dark:bg-gray-800 dark:border-gray-700" />
+            </div>
+            <div>
+              <label class="block text-sm mb-1">Expected Delivery Time</label>
+              <input id="expected_delivery_time" type="time" class="w-full border rounded px-3 py-2 mb-2 dark:bg-gray-800 dark:border-gray-700" />
+            </div>
+          </div>
+
+          <label class="block text-sm mb-1">Special Instructions</label>
+          <input id="special_instructions" class="w-full border rounded px-3 py-2 mb-2 dark:bg-gray-800 dark:border-gray-700" />
+
+          <label class="block text-sm mb-1">Shipping Cost</label>
+          <input id="shipping_cost" class="w-full border rounded px-3 py-2 mb-2 dark:bg-gray-800 dark:border-gray-700" />
+
+          <div class="grid grid-cols-2 gap-2 mt-1">
+            <div>
+              <label class="block text-sm mb-1">Sender Name</label>
+              <input id="sender_name" class="w-full border rounded px-3 py-2 mb-2 dark:bg-gray-800 dark:border-gray-700" />
+            </div>
+            <div>
+              <label class="block text-sm mb-1">Receiver Name</label>
+              <input id="receiver_name" class="w-full border rounded px-3 py-2 mb-2 dark:bg-gray-800 dark:border-gray-700" />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-sm mb-1">Sender Contact / Email</label>
+              <input id="sender_contact" class="w-full border rounded px-3 py-2 mb-2 dark:bg-gray-800 dark:border-gray-700" />
+            </div>
+            <div>
+              <label class="block text-sm mb-1">Receiver Contact / Email</label>
+              <input id="receiver_contact" class="w-full border rounded px-3 py-2 mb-2 dark:bg-gray-800 dark:border-gray-700" />
+            </div>
+          </div>
+
+          <label class="block text-sm mb-1">Status</label>
+          <select id="status" class="w-full border rounded px-3 py-2 mb-2 dark:bg-gray-800 dark:border-gray-700">
+            <option>Pending</option>
+            <option>In Transit</option>
+            <option>Out for Delivery</option>
+            <option>Delivered</option>
+            <option>Returned</option>
+            <option>Cancelled</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="mt-4 flex items-center gap-3">
+        <button id="confirmAdd" class="btn-red px-4 py-2 rounded font-semibold">✅ Confirm Add</button>
+        <button id="clearForm" class="px-4 py-2 rounded bg-gray-100 dark:bg-red-600 dark:border-gray-700">Clear</button>
+        <div id="formMessage" class="text-sm text-red-600"></div>
+      </div>
+
+    </section>
+
+    </section>
+
+    <!-- Delivery Session -->
+    <section id="deliverySession" class="page hidden">
+  <div class="max-w-3xl mx-auto p-6">
+    <h1 class="text-2xl font-bold mb-4">Create Delivery Session</h1>
+     <p class="text-gray-700 dark:text-gray-300 mb-4">
+        Delivery sessions assign parcels to couriers and update statuses in bulk. Fill required fields and optional info for detailed tracking.
+      </p>
+    <!-- Toggle button -->
+    <div class="mb-4 flex gap-2">
+      <button id="toggleSessionForm" class="px-4 py-2 bg-green-600 text-white rounded shadow hover:bg-green-700">
+        ➕ Add Delivery Session
+      </button>
+      <button id="refreshSessions" class="px-4 py-2 bg-gray-100 rounded hover:bg-gray-200 dark:bg-gray-800">Refresh Sessions</button>
+    </div>
+
+    <!-- Form (hidden by default) -->
+    <form id="deliverySessionForm" class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow space-y-4 max-w-lg w-full hidden">
+
+      <!-- Required -->
+      <div class="space-y-3 bg-gray-100 p-4 rounded-lg dark:bg-gray-600 dark:border-gray-700">
+        <h2 class="text-lg font-semibold">Required</h2>
+
+        <div>
+          <label class="block text-sm font-medium mb-1">Assign to Courier</label>
+          <select id="sessionCourier" name="courier_id" required class="w-full rounded border p-2 dark:bg-gray-800 dark:border-gray-700">
+            <option value="">Select Courier</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-1">Status</label>
+          <select id="sessionStatus" name="status" required class="w-full rounded border p-2 dark:bg-gray-800 dark:border-gray-700">
+            <option value="Out for Delivery">Out for Delivery</option>
+            <option value="In Transit">In Transit</option>
+            <option value="Picked Up">Picked Up</option>
+            <option value="Sorting">Sorting</option>
+            <option value="Delivered">Delivered</option>
+            <option value="Failed Delivery">Failed Delivery</option>
+            <option value="Returned to Sender">Returned to Sender</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-1">Parcels (optional — multi-select)</label>
+          <select id="sessionParcels" name="parcel_ids" multiple size="6" class="w-full rounded border p-2 dark:bg-gray-800 dark:border-gray-700">
+            <!-- options populated by JS -->
+          </select>
+          <p class="text-xs text-gray-500 mt-1 dark:text-white">Hold Ctrl/Cmd (or use mouse) to select multiple parcels.</p>
+        </div>
+      </div>
+
+      <!-- Optional -->
+      <div class="space-y-3 bg-gray-50 p-4 rounded-lg dark:bg-gray-600 dark:border-gray-700">
+        <h2 class="text-lg font-semibold">Optional</h2>
+
+        <div>
+          <label class="block text-sm font-medium mb-1">Session Route / Admin Notes</label>
+          <input id="sessionRoute" type="text" placeholder="e.g., Manila → QC (notes)" class="w-full rounded border p-2 dark:bg-gray-800 dark:border-gray-700" />
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+  <div>
+    <label class="block text-sm font-medium mb-1">Location</label>
+    <div class="flex gap-2">
+      <input id="sessionLocation" type="text" class="w-full rounded border p-2 dark:bg-gray-800 dark:border-gray-700" placeholder="Auto-fill using GPS" />
+      <button type="button" id="getSessionLocation"
+        class="bg-blue-600 text-white px-2 rounded hover:bg-blue-700">
+        📍
+      </button>
+    </div>
+  </div>
+
+  <div>
+    <label class="block text-sm font-medium mb-1">Auto-update parcel status</label>
+    <div class="flex items-center gap-2 mt-1">
+      <input id="autoUpdateParcelStatus" type="checkbox" checked />
+      <label class="text-sm">Yes (set parcel.status → session status)</label>
+    </div>
+  </div>
+</div>
+
+<div class="grid grid-cols-2 gap-3">
+  <div>
+    <label class="block text-sm font-medium mb-1">Latitude</label>
+    <input id="sessionLatitude" type="number" step="any" class="w-full rounded border p-2 dark:bg-gray-800 dark:border-gray-700" placeholder="Auto-fill using GPS" />
+  </div>
+  <div>
+    <label class="block text-sm font-medium mb-1">Longitude</label>
+    <input id="sessionLongitude" type="number" step="any" class="w-full rounded border p-2 dark:bg-gray-800 dark:border-gray-700" placeholder="Auto-fill using GPS" />
+  </div>
+</div>
+
+
+        <button type="button" id="getLocationBtn"
+          class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded dark:bg-blue-600">
+          Use Current Location
+        </button>
+
+
+        <div>
+          <label class="block text-sm font-medium mb-1">Courier Notes</label>
+          <textarea id="sessionCourierNotes" class="w-full rounded border p-2 dark:bg-gray-800 dark:border-gray-700"></textarea>
+        </div>
+
+      </div>
+
+      <!-- Actions -->
+      <div class="flex gap-3">
+        <button id="createSessionBtn" type="submit" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Create Delivery Session</button>
+        <button id="cancelSessionBtn" type="button" class="px-4 py-2 bg-gray-100 rounded hover:bg-gray-200 dark:bg-gray-600 dark:border-gray-700">Cancel</button>
+      </div>
+
+      <p id="deliverySessionMessage" class="text-sm mt-2"></p>
+    </form>
+
+    <!-- Active sessions list (updated live) -->
+    <div id="deliverySessionsList" class="mt-6 space-y-4"></div>
+
+    <!-- Details modal (hidden, simple) -->
+    <div id="sessionDetailModal" class="fixed inset-0 z-50 flex items-center justify-center hidden">
+      <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-xl w-full max-w-2xl">
+        <div class="flex justify-between items-center mb-3">
+          <h3 id="modalTitle" class="font-semibold"></h3>
+          <button id="closeSessionModal" class="text-gray-600 hover:text-gray-900">✕</button>
+        </div>
+        <div id="modalBody" class="space-y-2 text-sm"></div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+    <!-- Settings -->
+<section id="settings" class="page hidden flex justify-center items-start pt-10">
+  <div class="w-full max-w-md bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-8">
+    <h2 class="text-2xl font-semibold mb-6 text-gray-800 dark:text-gray-100">Settings</h2>
+    <p class="text-gray-700 dark:text-gray-300 mb-4">
+        Update your admin profile information or change your password. Save each change individually.
+      </p>
+    <!-- Name -->
+    <div class="mb-5">
+      <label for="adminName" class="block mb-2 font-medium text-gray-700 dark:text-gray-200">Name</label>
+      <input type="text" id="adminName" class="w-full px-4 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Your Name" />
+    </div>
+
+    <!-- Current Password -->
+    <div class="mb-5">
+      <label for="currentPassword" class="block mb-2 font-medium text-gray-700 dark:text-gray-200">Current Password</label>
+      <input type="password" id="currentPassword" class="w-full px-4 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Enter current password" />
+    </div>
+
+    <!-- New Password -->
+    <div class="mb-6">
+      <label for="newPassword" class="block mb-2 font-medium text-gray-700 dark:text-gray-200">New Password</label>
+      <input type="password" id="newPassword" class="w-full px-4 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Enter new password" />
+    </div>
+
+    <!-- Buttons -->
+    <div class="flex justify-between">
+      <button id="saveNameBtn" class="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">Save Name</button>
+      <button id="savePasswordBtn" class="px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">Save Password</button>
+    </div>
+  </div>
+</section>
+
+
+</main>
+
+    <!-- Scripts -->
+  <script src="main.js"></script>
+  <script src="loading.js"></script>
+  <script src="parcel.js"></script>
+  <script src="delivery_session.js"></script>
+  <script src="settings.js"></script>
+  <script>
+    // CHECKPOINT: Periodically check if admin is still logged in
+async function pollAdminStatus() {
+  await checkAdminLoggedIn();
+  setTimeout(pollAdminStatus, 5000);
+}
+pollAdminStatus();
+  </script>
+
+
+  <script>
+    
+    // Load and display admin's branch info
+    async function loadAdminBranch() {
+  const userUUID = getCookie('userUUID');
+  if (!userUUID) return;
+
+  // Get admin's branch_id
+  const { data: adminData, error: adminError } = await supabaseClient
+    .from('admins')
+    .select('branch_id')
+    .eq('id', userUUID)
+    .single();
+
+  if (adminError || !adminData) {
+    console.error('Failed to fetch admin branch:', adminError);
+    return;
+  }
+
+  const branchId = adminData.branch_id;
+  if (!branchId) return;
+
+  // Get branch details
+  const { data: branchData, error: branchError } = await supabaseClient
+    .from('branches')
+    .select('name, city, state')
+    .eq('id', branchId)
+    .single();
+
+  if (branchError || !branchData) {
+    console.error('Failed to fetch branch details:', branchError);
+    return;
+  }
+
+  // Display branch info
+  const pBranch = document.getElementById('pBranch');
+  if (pBranch) {
+    pBranch.textContent = `${branchData.name} — ${branchData.city || ''}, ${branchData.state || ''}`;
+  }
+}
+
+// Call this after admin login
+loadAdminBranch();
+
+
+    // Wait for tables to load before add parcel dropdowns
+    async function loadAddParcelDropdowns() {
+  const overlay = document.getElementById("addParcelOverlay");
+  const addParcelSection = document.getElementById("addParcel");
+
+  overlay.classList.remove("hidden");
+  addParcelSection.classList.add("locked");
+
+  try {
+    const [customers, branches, couriers] = await Promise.all([
+      supabaseClient.from("customers").select("id,name"),
+      supabaseClient.from("branches").select("id,name"),
+      supabaseClient.from("couriers").select("id,name")
+    ]);
+
+    fillDropdown("sender_id", customers.data);
+    fillDropdown("receiver_id", customers.data);
+    fillDropdown("origin_branch_id", branches.data);
+    fillDropdown("destination_branch_id", branches.data);
+    fillDropdown("current_courier_id", couriers.data);
+
+  } catch (err) {
+    console.error("Error loading form data:", err);
+  } finally {
+    overlay.classList.add("hidden");
+    addParcelSection.classList.remove("locked");
+  }
+}
+
+function fillDropdown(id, data) {
+  const select = document.getElementById(id);
+  select.innerHTML = data.map(d => `<option value="${d.id}">${d.name}</option>`).join("");
+}
+
+
+  // Toggle Parcel Management children
+  document.getElementById("toggleAddParcel").addEventListener("click", () => {
+    const menu = document.getElementById("addParcelMenu");
+    const arrow = document.getElementById("addParcelArrow");
+    menu.classList.toggle("hidden");
+    arrow.textContent = menu.classList.contains("hidden") ? "▼" : "▲";
+  });
+
+ const themeToggle = document.getElementById("theme-toggle");
+    const themeLabel = document.getElementById("theme-label");
+    const storageKey = "theme";
+    const root = document.documentElement;
+
+    function applyTheme(isDark) {
+      if (isDark) {
+        root.classList.add("dark");
+        themeLabel.textContent = "☀️ Light Mode";
+        localStorage.setItem(storageKey, "dark");
+      } else {
+        root.classList.remove("dark");
+        themeLabel.textContent = "🌙 Dark Mode";
+        localStorage.setItem(storageKey, "light");
+      }
+    }
+
+    // Load saved theme
+    const savedTheme = localStorage.getItem(storageKey);
+    if (savedTheme === "dark") applyTheme(true);
+    else applyTheme(false);
+
+    themeToggle.addEventListener("click", () => {
+      const isDark = root.classList.contains("dark");
+      applyTheme(!isDark);
+    });
+
+    const sidebar = document.getElementById('sidebar');
+    const backdrop = document.getElementById('sidebarBackdrop');
+    const hamburger = document.getElementById('hamburger');
+    function openSidebar(){ sidebar.classList.remove('-translate-x-full'); backdrop.classList.remove('hidden'); }
+    function closeSidebar(){ sidebar.classList.add('-translate-x-full'); backdrop.classList.add('hidden'); }
+    function toggleSidebar(){ sidebar.classList.contains('-translate-x-full') ? openSidebar() : closeSidebar(); }
+    if(hamburger) hamburger.addEventListener('click', toggleSidebar);
+    if(backdrop) backdrop.addEventListener('click', closeSidebar);
+
+    function showPage(pageId) {
+  // Hide all pages
+  document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
+
+
+  
+  // Show target page
+  const targetPage = document.getElementById(pageId);
+  if (targetPage) {
+    targetPage.classList.remove('hidden');
+
+    // 🔑 Load dropdowns only when Add Parcel is opened
+    if (pageId === "addParcel") {
+      loadAddParcelDropdowns();
+    }
+  } else {
+    console.warn(`⚠️ Page with id="${pageId}" not found`);
+  }
+
+  // Reset all sidebar buttons
+  document.querySelectorAll('.navbtn').forEach(btn => 
+    btn.classList.remove('bg-red-50', 'text-red-700', 'font-semibold')
+  );
+
+  // Highlight the active button if found
+  const activeBtn = document.querySelector(`.navbtn[data-target="${pageId}"]`);
+  if (activeBtn) {
+    activeBtn.classList.add('bg-red-50', 'text-red-700', 'font-semibold');
+  }
+
+  // Auto-close sidebar on mobile
+  if (window.innerWidth < 768) closeSidebar();
+}
+
+// Attach event listeners
+document.querySelectorAll('.navbtn').forEach(btn =>
+  btn.addEventListener('click', () => showPage(btn.dataset.target))
+);
+
+// Default page on load
+document.addEventListener('DOMContentLoaded', () => showPage('dashboard'));
+
+// Chart.js setup
+const ctx = document.getElementById('performanceChart');
+if (ctx) {
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
+      datasets: [{
+        label: 'Deliveries',
+        data: [12, 19, 8, 15, 22],
+        borderColor: 'rgb(75, 192, 192)',
+        tension: 0.4
+      }]
+    },
+    options: { responsive: true, maintainAspectRatio: false }
+  });
+  ctx.parentElement.style.height = '320px';
+}
+
+
+
+
+
+
+
+
+
+
+const chatButton = document.getElementById('chatButton');
+const chatModal = document.getElementById('chatModal');
+const closeChat = document.getElementById('closeChat');
+const chatBox = document.getElementById('chat');
+const input = document.getElementById('messageInput');
+const sendBtn = document.getElementById('sendBtn');
+const fileBtn = document.getElementById('fileBtn');
+const fileInput = document.getElementById('fileInput');
+
+const ROOM_NAME = 'default-room';
+let USER_NAME = 'Guest';
+let oldestMessage = null;
+let loadingOlder = false;
+let lastRenderedUserName = null; // track last message for merging
+
+// --- Scroll helpers ---
+function scrollToBottom() {
+  if (chatBox) chatBox.scrollTop = chatBox.scrollHeight;
+}
+function isNearBottom() {
+  return chatBox.scrollHeight - chatBox.scrollTop - chatBox.clientHeight < 50;
+}
+
+// --- Render a single message ---
+function renderMessage(msg, scroll = true, prepend = false) {
+  if (!chatBox) return;
+
+  const sameUser = msg.user_name === lastRenderedUserName;
+
+  const wrapper = document.createElement('div');
+  wrapper.className = 'flex ' + (msg.user_name === USER_NAME ? 'justify-end' : 'justify-start');
+
+  const bubble = document.createElement('div');
+  bubble.className =
+    'max-w-[70%] px-3 py-2 rounded-lg text-sm break-words ' +
+    (msg.user_name === USER_NAME
+      ? 'bg-red-500 text-white rounded-br-none'
+      : 'bg-gray-200 text-black rounded-bl-none');
+
+  const timestamp = new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  let body = '';
+  if (msg.type === 'image') {
+    body = `<img src="${msg.url}" class="chat-message rounded" />`;
+  } else {
+    body = `<div>${msg.content}</div>`;
+  }
+
+  if (sameUser && !prepend) {
+    // Merge with last bubble
+    const lastBubble = chatBox.lastChild.querySelector('div:last-child');
+    lastBubble.innerHTML += body;
+  } else {
+    bubble.innerHTML = `
+      <div class="chat-message text-xs text-gray-800 mb-1">${msg.user_name} • ${timestamp}</div>
+      ${body}`;
+    wrapper.appendChild(bubble);
+
+    if (prepend) {
+      chatBox.insertBefore(wrapper, chatBox.firstChild);
+    } else {
+      chatBox.appendChild(wrapper);
+    }
+  }
+
+  lastRenderedUserName = msg.user_name;
+
+  if (scroll) scrollToBottom();
+}
+
+// --- Load the latest messages ---
+async function loadMessages() {
+  const { data } = await supabaseClient
+    .from('messages')
+    .select('*')
+    .eq('room_name', ROOM_NAME)
+    .order('created_at', { ascending: false })
+    .limit(20);
+
+  if (data) {
+    chatBox.innerHTML = '';
+    lastRenderedUserName = null;
+    data.reverse().forEach((msg) => renderMessage(msg, false));
+    scrollToBottom();
+    oldestMessage = data[0];
+  }
+}
+
+// --- Load older messages on scroll-up ---
+async function loadOlderMessages() {
+  if (!oldestMessage || loadingOlder) return;
+  loadingOlder = true;
+
+  const prevHeight = chatBox.scrollHeight;
+
+  const { data } = await supabaseClient
+    .from('messages')
+    .select('*')
+    .eq('room_name', ROOM_NAME)
+    .lt('created_at', oldestMessage.created_at)
+    .order('created_at', { ascending: false })
+    .limit(20);
+
+  if (data && data.length > 0) {
+    oldestMessage = data[data.length - 1];
+    data.reverse().forEach((msg) => renderMessage(msg, false, true));
+    chatBox.scrollTop = chatBox.scrollHeight - prevHeight;
+  }
+
+  loadingOlder = false;
+}
+
+// Debounced scroll listener
+let scrollTimeout = null;
+chatBox.addEventListener('scroll', () => {
+  if (chatBox.scrollTop === 0 && !scrollTimeout) {
+    scrollTimeout = setTimeout(() => {
+      loadOlderMessages();
+      scrollTimeout = null;
+    }, 200);
+  }
+});
+
+// --- Send text message ---
+async function sendMessage() {
+  const content = input.value.trim();
+  if (!content) return;
+
+  await supabaseClient.from('messages').insert([
+    { room_name: ROOM_NAME, user_name: USER_NAME, type: 'text', content }
+  ]);
+
+  input.value = '';
+}
+
+sendBtn?.addEventListener('click', sendMessage);
+input?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') sendMessage();
+});
+
+// --- Listen for new realtime messages ---
+supabaseClient
+  .channel(`room-${ROOM_NAME}`)
+  .on('postgres_changes', {
+    event: 'INSERT',
+    schema: 'public',
+    table: 'messages',
+    filter: `room_name=eq.${ROOM_NAME}`,
+  }, (payload) => {
+    const atBottom = isNearBottom();
+    renderMessage(payload.new, atBottom);
+  })
+  .subscribe();
+
+// --- Modal open/close ---
+chatButton.addEventListener('click', () => {
+  chatModal.classList.toggle('hidden');
+  if (!chatModal.classList.contains('hidden')) setTimeout(scrollToBottom, 0);
+});
+closeChat.addEventListener('click', () => chatModal.classList.add('hidden'));
+
+// --- Init user + load messages ---
+(async () => {
+  const userUUID = getCookie('userUUID');
+  if (!userUUID) return console.log("No admin UUID found, treating as guest");
+
+  const { data: adminData, error: adminError } = await supabaseClient
+    .from('admins')
+    .select('name')
+    .eq('id', userUUID)
+    .single();
+
+  USER_NAME = (!adminError && adminData) ? adminData.name : 'Guest';
+  console.log("Logged in as:", USER_NAME);
+  loadMessages();
+})();
+
+// --- Image Upload ---
+if (fileBtn && fileInput) {
+  fileBtn.addEventListener('click', () => fileInput.click());
+
+  fileInput.addEventListener('change', async () => {
+    const file = fileInput.files[0];
+    if (!file) return;
+
+    const { data, error } = await supabaseClient.storage
+      .from('chat-uploads')
+      .upload(`room-${ROOM_NAME}/${Date.now()}-${file.name}`, file, { cacheControl: '3600', upsert: false });
+
+    if (error) return console.error("Upload failed:", error);
+
+    const { data: urlData } = supabaseClient.storage
+      .from('chat-uploads')
+      .getPublicUrl(data.path);
+
+    await supabaseClient.from('messages').insert([{
+      room_name: ROOM_NAME,
+      user_name: USER_NAME,
+      type: 'image',
+      url: urlData.publicUrl,
+      content: '[image]'
+    }]);
+
+    fileInput.value = '';
+  });
+}
+
+
+
+
+  </script>
+</body>
+</html>

@@ -1,0 +1,31 @@
+/* Loader overlay */
+#loadingOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background-color: white;
+  opacity: 1;
+  transition: opacity 0.7s ease;
+}
+
+/* Loader spinning circle */
+.loader {
+  width: 50px;
+  height: 50px;
+  border: 5px solid #e70014;
+  border-top: 5px solid transparent;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 0.75rem;
+}
+
+/* Spin animation */
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+

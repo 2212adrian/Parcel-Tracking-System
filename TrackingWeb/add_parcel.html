@@ -1,0 +1,586 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Parcel Dashboard — Display & Add (no auth)</title>
+
+  <!-- Tailwind (CDN) -->
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+
+  <!-- Supabase JS (UMD) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" defer></script>
+
+  <style>
+    body { background: linear-gradient(180deg,#fffafa,#fff); font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; }
+    header { background: #e70014; }
+    .btn-red { background: #e70014; color: white; }
+    .btn-red:hover { background: #bf0011; }
+    .card { background: white; border-radius: 12px; box-shadow: 0 6px 20px rgba(0,0,0,0.06); }
+    pre { white-space: pre-wrap; word-break: break-word; }
+    .small-muted { font-size: .85rem; color: #6b7280; }
+  </style>
+</head>
+<body class="min-h-screen">
+
+  <header class="h-16 flex items-center justify-center text-white relative">
+    <h1 class="text-lg font-bold">Parcel Manager — Display & Add</h1>
+    <div class="absolute right-4">
+      <button id="refreshAll" class="px-3 py-1 rounded bg-white text-red-600 font-semibold hover:bg-gray-100">Refresh</button>
+    </div>
+  </header>
+
+  <main class="p-6 space-y-6">
+
+    <!-- Table selector -->
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <label for="tableSelect" class="font-medium">Select table:</label>
+        <select id="tableSelect" class="border rounded px-3 py-2">
+          <option value="parcels" selected>parcels</option>
+          <option value="customers">customers</option>
+          <option value="branches">branches</option>
+          <option value="couriers">couriers</option>
+          <option value="parcel_updates">parcel_updates</option>
+          <option value="admins">admins</option>
+        </select>
+      </div>
+      <div id="tableCount" class="small-muted"></div>
+    </div>
+
+    <!-- Table container -->
+    <section id="tableCard" class="card p-4">
+      <div id="tableContainer" class="overflow-x-auto"></div>
+    </section>
+
+    <!-- Add Parcel Form: Required / Optional -->
+    <section class="card p-6">
+      <div class="flex items-start justify-between">
+        <div>
+          <h2 class="text-2xl font-bold text-red-600">➕ Add Parcel</h2>
+          <p class="small-muted mt-1">Required (left) and optional (right). Select customers/branches/couriers from dropdowns.</p>
+        </div>
+        <div class="text-sm small-muted">Status enum: Pending, In Transit, Out for Delivery, Delivered, Returned, Cancelled</div>
+      </div>
+
+      <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Required -->
+        <div class="border rounded p-4">
+          <h3 class="font-semibold text-red-600 mb-3">Required</h3>
+
+          <label class="block text-sm mb-1">Tracking Code *</label>
+          <div class="flex gap-2 mb-3">
+            <input id="tracking_code" class="flex-1 border rounded px-3 py-2" placeholder="tracking_code (unique)" />
+            <button id="genTrackingCode" class="px-3 py-2 rounded bg-gray-100">Generate</button>
+          </div>
+
+
+          <label class="block text-sm mb-1">Public ID *</label>
+          <div class="flex gap-2 mb-3">
+            <input id="public_id" class="flex-1 border rounded px-3 py-2" placeholder="public_id (unique)" />
+            <button id="genPublicId" class="px-3 py-2 rounded bg-gray-100">Generate</button>
+          </div>
+
+          <label class="block text-sm mb-1">Secret ID *</label>
+          <div class="flex gap-2 mb-3">
+            <input id="secret_id" class="flex-1 border rounded px-3 py-2" placeholder="secret_id (unique)" />
+            <button id="genSecretId" class="px-3 py-2 rounded bg-gray-100">Generate</button>
+          </div>
+
+          <label class="block text-sm mb-1">Sender (customer) *</label>
+          <select id="sender_id" class="w-full border rounded px-3 py-2 mb-3"></select>
+
+          <label class="block text-sm mb-1">Receiver (customer) *</label>
+          <select id="receiver_id" class="w-full border rounded px-3 py-2 mb-3"></select>
+        </div>
+
+        <!-- Optional -->
+        <div class="border rounded p-4">
+          <h3 class="font-semibold text-gray-700 mb-3">Optional</h3>
+
+          <label class="block text-sm mb-1">Parcel Name</label>
+          <input id="parcel_name" class="w-full border rounded px-3 py-2 mb-2" />
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-sm mb-1">Weight (kg)</label>
+              <input id="weight" class="w-full border rounded px-3 py-2 mb-2" />
+            </div>
+            <div>
+              <label class="block text-sm mb-1">Dimensions</label>
+              <input id="dimensions" class="w-full border rounded px-3 py-2 mb-2" />
+            </div>
+          </div>
+
+          <label class="block text-sm mb-1">Parcel Type</label>
+          <input id="parcel_type" class="w-full border rounded px-3 py-2 mb-2" placeholder="Express, Standard, Fragile..." />
+
+          <label class="block text-sm mb-1">Description</label>
+          <input id="parcel_description" class="w-full border rounded px-3 py-2 mb-2" />
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-sm mb-1">Declared Value</label>
+              <input id="declared_value" class="w-full border rounded px-3 py-2 mb-2" />
+            </div>
+            <div>
+              <label class="block text-sm mb-1">Insurance Amount</label>
+              <input id="insurance_amount" class="w-full border rounded px-3 py-2 mb-2" />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-sm mb-1">Origin Branch</label>
+              <select id="origin_branch_id" class="w-full border rounded px-3 py-2 mb-2"></select>
+            </div>
+            <div>
+              <label class="block text-sm mb-1">Destination Branch</label>
+              <select id="destination_branch_id" class="w-full border rounded px-3 py-2 mb-2"></select>
+            </div>
+          </div>
+
+          <label class="block text-sm mb-1">Current Courier</label>
+          <select id="current_courier_id" class="w-full border rounded px-3 py-2 mb-2"></select>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-sm mb-1">Expected Delivery Date</label>
+              <input id="expected_delivery_date" type="date" class="w-full border rounded px-3 py-2 mb-2" />
+            </div>
+            <div>
+              <label class="block text-sm mb-1">Expected Delivery Time</label>
+              <input id="expected_delivery_time" type="time" class="w-full border rounded px-3 py-2 mb-2" />
+            </div>
+          </div>
+
+          <label class="block text-sm mb-1">Special Instructions</label>
+          <input id="special_instructions" class="w-full border rounded px-3 py-2 mb-2" />
+
+          <label class="block text-sm mb-1">Shipping Cost</label>
+          <input id="shipping_cost" class="w-full border rounded px-3 py-2 mb-2" />
+
+          <div class="grid grid-cols-2 gap-2 mt-1">
+            <div>
+              <label class="block text-sm mb-1">Sender Name</label>
+              <input id="sender_name" class="w-full border rounded px-3 py-2 mb-2" />
+            </div>
+            <div>
+              <label class="block text-sm mb-1">Receiver Name</label>
+              <input id="receiver_name" class="w-full border rounded px-3 py-2 mb-2" />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-sm mb-1">Sender Contact / Email</label>
+              <input id="sender_contact" class="w-full border rounded px-3 py-2 mb-2" />
+            </div>
+            <div>
+              <label class="block text-sm mb-1">Receiver Contact / Email</label>
+              <input id="receiver_contact" class="w-full border rounded px-3 py-2 mb-2" />
+            </div>
+          </div>
+
+          <label class="block text-sm mb-1">Status</label>
+          <select id="status" class="w-full border rounded px-3 py-2 mb-2">
+            <option>Pending</option>
+            <option>In Transit</option>
+            <option>Out for Delivery</option>
+            <option>Delivered</option>
+            <option>Returned</option>
+            <option>Cancelled</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="mt-4 flex items-center gap-3">
+        <button id="confirmAdd" class="btn-red px-4 py-2 rounded font-semibold">✅ Confirm Add</button>
+        <button id="clearForm" class="px-4 py-2 rounded bg-gray-100">Clear</button>
+        <div id="formMessage" class="text-sm text-red-600"></div>
+      </div>
+
+    </section>
+
+    <!-- Parcel details / JSON viewer -->
+    <section class="card p-4">
+      <h3 class="font-semibold mb-2">Row Details</h3>
+      <pre id="rowDetails" class="p-3 bg-gray-50 rounded text-sm text-gray-800">Click a row to view details here.</pre>
+    </section>
+
+  </main>
+
+  <script>
+  // Wait until supabase script loads
+  window.addEventListener('load', async () => {
+    const SUPABASE_URL = "https://ehupnvkselcupxqyofzy.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_cNXTZmBrYiYvd8SOI2ZGkQ_sWHLy_uf";
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    // client-side cache for quick mapping
+    const cache = {
+      parcels: [], customers: [], branches: [], couriers: [], parcel_updates: [], admins: []
+    };
+
+    const tableSelect = document.getElementById('tableSelect');
+    const tableContainer = document.getElementById('tableContainer');
+    const tableCount = document.getElementById('tableCount');
+    const rowDetails = document.getElementById('rowDetails');
+    const formMessage = document.getElementById('formMessage');
+
+    // helper to fetch a table
+    async function fetchTable(name) {
+      try {
+        // try ordering by created_at where possible for nicer UX
+        const orderable = ['parcels','customers','branches','couriers','parcel_updates','admins'];
+        const q = supabaseClient.from(name).select('*').limit(1000);
+        if (orderable.includes(name)) q.order('created_at', { ascending: false });
+        const { data, error } = await q;
+        if (error) {
+          console.error('Fetch error', name, error);
+          return [];
+        }
+        return data || [];
+      } catch (e) {
+        console.error('Unexpected fetch error', e);
+        return [];
+      }
+    }
+
+    // load all tables
+    async function loadAll() {
+      tableContainer.innerHTML = "<div class='p-4 small-muted'>Loading tables...</div>";
+      cache.customers = await fetchTable('customers');
+      cache.branches = await fetchTable('branches');
+      cache.couriers = await fetchTable('couriers');
+      cache.parcels = await fetchTable('parcels');
+      cache.parcel_updates = await fetchTable('parcel_updates');
+      cache.admins = await fetchTable('admins');
+      populateFormSelects();
+      renderSelectedTable();
+    }
+
+    // Build maps for fast lookup
+    function buildMaps() {
+      const customerMap = new Map(cache.customers.map(c => [c.id, c.name || c.email || (c.phone || c.id)]));
+      const branchMap = new Map(cache.branches.map(b => [b.id, b.name || b.address || b.id]));
+      const courierMap = new Map(cache.couriers.map(c => [c.id, c.name || c.private_id || c.id]));
+      return { customerMap, branchMap, courierMap };
+    }
+
+    // generic table rendering
+    // generic table rendering
+function renderGenericTable(rows, name) {
+  if (!rows || rows.length === 0) {
+    tableContainer.innerHTML = "<div class='p-4 small-muted'>No rows found.</div>";
+    tableCount.textContent = "0 rows";
+    return;
+  }
+  const keys = Object.keys(rows[0]);
+
+  const table = document.createElement('table');
+  table.className = "min-w-full border-collapse";
+
+  // Head
+  const thead = document.createElement('thead');
+  thead.innerHTML = `
+    <tr class="bg-gray-100">
+      ${keys.map(k => `<th class="px-3 py-2 border text-left">${escapeHtml(k)}</th>`).join("")}
+    </tr>`;
+  table.appendChild(thead);
+
+  // Body
+  const tbody = document.createElement('tbody');
+  rows.forEach(r => {
+    const tr = document.createElement('tr');
+    tr.className = "hover:bg-gray-50 cursor-pointer border-b";
+    tr.innerHTML = keys
+      .map(k => `<td class="px-3 py-2 border align-top">${escapeHtml(renderCell(r[k]))}</td>`)
+      .join("");
+    tr.addEventListener('click', () => showDetails(r));
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+
+  tableContainer.innerHTML = "";
+  tableContainer.appendChild(table);
+  tableCount.textContent = `${rows.length} rows`;
+}
+
+
+    // parcels-specific rendering: replace fk uuids with friendly names
+    function renderParcelsTable(rows) {
+      const { customerMap, branchMap, courierMap } = buildMaps();
+
+      if (!rows || rows.length === 0) {
+        tableContainer.innerHTML = "<div class='p-4 small-muted'>No parcels found.</div>";
+        tableCount.textContent = "0 rows";
+        return;
+      }
+
+      const table = document.createElement('table');
+      table.className = "min-w-full border-collapse";
+      const thead = document.createElement('thead');
+      thead.innerHTML = `<tr class="bg-gray-100">
+        <th class="px-3 py-2 border">Tracking</th>
+        <th class="px-3 py-2 border">Parcel</th>
+        <th class="px-3 py-2 border">Sender</th>
+        <th class="px-3 py-2 border">Receiver</th>
+        <th class="px-3 py-2 border">Status</th>
+        <th class="px-3 py-2 border">Origin</th>
+        <th class="px-3 py-2 border">Destination</th>
+        <th class="px-3 py-2 border">Courier</th>
+        <th class="px-3 py-2 border">Expected</th>
+        <th class="px-3 py-2 border">Created At</th>
+      </tr>`;
+      table.appendChild(thead);
+
+      const tbody = document.createElement('tbody');
+      rows.forEach(r => {
+        const senderLabel = r.sender_name || customerMap.get(r.sender_id) || r.sender_id || '';
+        const receiverLabel = r.receiver_name || customerMap.get(r.receiver_id) || r.receiver_id || '';
+        const originLabel = branchMap.get(r.origin_branch_id) || r.origin_branch_id || '';
+        const destLabel = branchMap.get(r.destination_branch_id) || r.destination_branch_id || '';
+        const courierLabel = courierMap.get(r.current_courier_id) || r.current_courier_id || '';
+        const expected = (r.expected_delivery_date ? r.expected_delivery_date : '') + (r.expected_delivery_time ? ' ' + r.expected_delivery_time : '');
+        const created = r.created_at ? new Date(r.created_at).toLocaleString() : '';
+
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-gray-50 cursor-pointer border-b";
+        tr.innerHTML = `
+          <td class="px-3 py-2">${escapeHtml(r.tracking_code || '')}</td>
+          <td class="px-3 py-2">${escapeHtml(r.parcel_name || '')}</td>
+          <td class="px-3 py-2">${escapeHtml(senderLabel)}</td>
+          <td class="px-3 py-2">${escapeHtml(receiverLabel)}</td>
+          <td class="px-3 py-2">${escapeHtml(r.status || '')}</td>
+          <td class="px-3 py-2">${escapeHtml(originLabel)}</td>
+          <td class="px-3 py-2">${escapeHtml(destLabel)}</td>
+          <td class="px-3 py-2">${escapeHtml(courierLabel)}</td>
+          <td class="px-3 py-2">${escapeHtml(expected)}</td>
+          <td class="px-3 py-2">${escapeHtml(created)}</td>
+        `;
+        tr.addEventListener('click', () => showDetails(r));
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      tableContainer.innerHTML = "";
+      tableContainer.appendChild(table);
+      tableCount.textContent = `${rows.length} rows`;
+    }
+
+    // helper to render nested objects/arrays as brief strings
+    function renderCell(value) {
+      if (value === null || value === undefined) return '';
+      if (typeof value === 'object') return JSON.stringify(value);
+      return String(value);
+    }
+
+    function escapeHtml(s) {
+      if (!s && s !== 0) return '';
+      return String(s).replace(/[&<>"']/g, function (m) {
+        return ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[m];
+      });
+    }
+
+    // show JSON detail
+    function showDetails(obj) {
+      rowDetails.textContent = JSON.stringify(obj, null, 2);
+      rowDetails.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    // render currently selected table
+    function renderSelectedTable() {
+      const t = tableSelect.value;
+      if (t === 'parcels') renderParcelsTable(cache.parcels);
+      else renderGenericTable(cache[t], t);
+    }
+
+    // Populate selects used by Add Parcel form
+    function populateFormSelects() {
+      const fill = (selectEl, items, labelFn) => {
+        selectEl.innerHTML = '<option value="">-- none --</option>';
+        items.forEach(it => {
+          const opt = document.createElement('option');
+          opt.value = it.id;
+          opt.textContent = `${labelFn(it)}${it.id ? ' • ' + it.id.slice(0,8) : ''}`;
+          selectEl.appendChild(opt);
+        });
+      };
+
+      fill(document.getElementById('sender_id'), cache.customers, c => c.name || c.email || c.phone || ' (customer)');
+      fill(document.getElementById('receiver_id'), cache.customers, c => c.name || c.email || c.phone || ' (customer)');
+      fill(document.getElementById('origin_branch_id'), cache.branches, b => b.name || b.address || ' (branch)');
+      fill(document.getElementById('destination_branch_id'), cache.branches, b => b.name || b.address || ' (branch)');
+      fill(document.getElementById('current_courier_id'), cache.couriers, c => c.name || c.private_id || ' (courier)');
+    }
+
+    // Generate simple UUID v4 (browser)
+    function uuidv4() {
+      return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+        (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+      );
+    }
+
+    // wire UI events
+    document.getElementById('tableSelect').addEventListener('change', renderSelectedTable);
+    document.getElementById('refreshAll').addEventListener('click', loadAll);
+
+      // Random helpers
+  function randomChar() {
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    return chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+
+  function generatePublicId() {
+    let str = "PUB";
+    for (let i = 0; i < 8; i++) str += randomChar();
+    return str;
+  }
+
+  function generateSecretId() {
+    let str = "SEC";
+    for (let i = 0; i < 32; i++) {
+      if (i % 2 === 0) str += Math.floor(Math.random() * 10); // digit
+      else str += String.fromCharCode(65 + Math.floor(Math.random() * 26)); // letter A–Z
+    }
+    return str;
+  }
+
+  // New: generate Tracking Code like JT5D8390EF
+  // Generate Tracking Code like JT5D8390EF
+function generateTrackingCode() {
+  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  const digits = "0123456789";
+  
+  function randChar(str) {
+    return str[Math.floor(Math.random() * str.length)];
+  }
+
+  return (
+    "JT" +
+    randChar(digits) +                 // 1 digit
+    randChar(letters) +                // 1 letter
+    randChar(digits) + randChar(digits) + randChar(digits) + randChar(digits) + // 4 digits
+    randChar(letters) + randChar(letters) // 2 letters
+  );
+}
+
+
+
+  // Wire buttons
+
+  document.getElementById('genTrackingCode').addEventListener('click', (e) => {
+  e.preventDefault();
+  document.getElementById('tracking_code').value = generateTrackingCode();
+ });
+
+  
+  document.getElementById('genPublicId').addEventListener('click', (e) => {
+    e.preventDefault();
+    document.getElementById('public_id').value = generatePublicId();
+  });
+
+  document.getElementById('genSecretId').addEventListener('click', (e) => {
+    e.preventDefault();
+    document.getElementById('secret_id').value = generateSecretId();
+  });
+
+    document.getElementById('clearForm').addEventListener('click', (e) => {
+      e.preventDefault();
+      document.querySelectorAll('input, select').forEach(el => { if (el.id && el.id !== 'tableSelect') el.value = ''; });
+      formMessage.textContent = '';
+      rowDetails.textContent = 'Click a row to view details here.';
+    });
+
+    // Add Parcel
+    document.getElementById('confirmAdd').addEventListener('click', async (e) => {
+      e.preventDefault();
+      formMessage.style.color = 'red';
+      formMessage.textContent = '';
+
+
+          // Auto-generate tracking code if left empty
+        if (!document.getElementById('tracking_code').value.trim()) {
+          document.getElementById('tracking_code').value = generateTrackingCode();
+        }
+        
+        // validate required fields
+      const required = ['tracking_code','public_id','secret_id','sender_id','receiver_id'];
+      for (const id of required) {
+        const val = document.getElementById(id).value;
+        if (!val || val.trim() === '') {
+          formMessage.textContent = 'Please fill all required fields.';
+          return;
+        }
+      }
+
+      if (!confirm('Confirm adding this parcel?')) return;
+
+      // build payload
+      const get = id => document.getElementById(id).value?.trim();
+      const payload = {
+        tracking_code: get('tracking_code'),
+        public_id: get('public_id'),
+        secret_id: get('secret_id'),
+        sender_id: get('sender_id'),
+        receiver_id: get('receiver_id'),
+        parcel_name: get('parcel_name') || null,
+        weight: get('weight') ? parseFloat(get('weight')) : null,
+        dimensions: get('dimensions') || null,
+        parcel_type: get('parcel_type') || null,
+        parcel_description: get('parcel_description') || null,
+        declared_value: get('declared_value') ? parseFloat(get('declared_value')) : null,
+        insurance_amount: get('insurance_amount') ? parseFloat(get('insurance_amount')) : null,
+        status: get('status') || 'Pending',
+        origin_branch_id: get('origin_branch_id') || null,
+        destination_branch_id: get('destination_branch_id') || null,
+        current_courier_id: get('current_courier_id') || null,
+        expected_delivery_date: get('expected_delivery_date') || null,
+        expected_delivery_time: get('expected_delivery_time') || null,
+        special_instructions: get('special_instructions') || null,
+        shipping_cost: get('shipping_cost') ? parseFloat(get('shipping_cost')) : null,
+        sender_name: get('sender_name') || null,
+        sender_contact: get('sender_contact') || null,
+        sender_email: get('sender_contact') || null,
+        receiver_name: get('receiver_name') || null,
+        receiver_contact: get('receiver_contact') || null,
+        receiver_email: get('receiver_contact') || null
+      };
+
+      // clean undefined/null/empty keys so we only send present fields
+      const cleaned = {};
+      Object.keys(payload).forEach(k => {
+        const v = payload[k];
+        if (v !== null && v !== '' && v !== undefined) cleaned[k] = v;
+      });
+
+      try {
+        const { data, error } = await supabaseClient.from('parcels').insert([cleaned]).select();
+        if (error) {
+          formMessage.textContent = `Insert error: ${error.message || error}`;
+          return;
+        }
+        formMessage.style.color = 'green';
+        formMessage.textContent = 'Parcel added successfully.';
+        // update cache and UI
+        await loadAll();
+        // show inserted row (if returned)
+        if (data && data[0]) showDetails(data[0]);
+        // clear required id fields to avoid duplicates but keep selects maybe
+        document.getElementById('tracking_code').value = '';
+        document.getElementById('public_id').value = '';
+        document.getElementById('secret_id').value = '';
+        setTimeout(()=> formMessage.textContent = '', 3000);
+      } catch (err) {
+        console.error(err);
+        formMessage.textContent = err.message || 'Unexpected error inserting parcel';
+      }
+    });
+
+    // initial load
+    await loadAll();
+  });
+  
+  </script>
+</body>
+</html>

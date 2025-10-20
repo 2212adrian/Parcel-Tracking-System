@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>J&T Express - Parcel Tracking</title>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@700&family=Roboto:ital,wght@1,400&display=swap" rel="stylesheet">
+  <link href="loading.css" rel="stylesheet">
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    #map {
+      width: 100%;
+      height: 300px;
+      border-radius: 12px;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body class="bg-gray-100 font-sans">
+
+  <!-- Loading Overlay -->
+  <div id="loadingOverlay" class="fixed z-[100] inset-0 bg-white flex flex-col items-center justify-center transition-opacity duration-700 opacity-100">
+    <img src="assets/JT_Express_Latest.png" alt="Logo" class="w-32 sm:w-48 md:w-64 pb-10 mb-4 animate-bounce">
+    <div class="loader"></div>
+    <p class="mt-4 text-gray-700 font-semibold">Loading...</p>
+  </div>
+
+  <!-- Role Selection Overlay -->
+  <div id="roleOverlay" class="fixed z-50 inset-0 bg-white/95 flex flex-col items-center justify-center transition-all duration-700 opacity-0 -translate-y-20 pointer-events-none">
+    <h2 class="text-2xl font-bold mb-8 text-gray-800 text-center">Select Your Role</h2>
+    <div class="flex flex-wrap justify-center gap-4">
+      <button id="overlayCustomerBtn" class="flex flex-col items-center text-xl sm:text-2xl px-6 sm:px-10 py-4 sm:py-6 rounded-xl bg-red-600 text-white font-bold shadow-lg hover:bg-red-700 transition">
+        <img src="assets/Customer.png" alt="Customer Icon" class="w-20 sm:w-24 h-20 sm:h-24 mb-2 sm:mb-3">
+        Customer
+      </button>
+      <button id="overlayCourierBtn" class="flex flex-col items-center text-xl sm:text-2xl px-6 sm:px-10 py-4 sm:py-6 rounded-xl bg-gray-700 text-white font-bold shadow-lg hover:bg-gray-900 transition">
+        <img src="assets/Courier.png" alt="Courier Icon" class="w-20 sm:w-24 h-20 sm:h-24 mb-2 sm:mb-3">
+        Courier
+      </button>
+    </div>
+  </div>
+
+  <!-- Main App Content -->
+  <div id="appContent" class="opacity-0 transition-opacity duration-700">
+
+    <!-- Header -->
+    <header class="bg-[#e70014] h-14 sm:h-16 text-white p-2 sm:p-4 shadow flex items-center justify-center relative">
+      <img src="assets/JT_Express_Logo_invert.jpg" class="w-24 sm:w-36 absolute left-2 sm:left-4 top-1/2 -translate-y-1/2" alt="Logo">
+      <h1 class="text-base sm:text-xl font-bold text-center w-full">Parcel Tracking</h1>
+      <div class="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 flex gap-2">
+        <a href="https://www.jtexpress.ph/" target="_blank" class="bg-white text-red-600 px-2 sm:px-4 py-1 sm:py-2 rounded-lg hover:bg-gray-100 font-semibold text-xs sm:text-base">
+          Go Back &gt;&gt;&gt;
+        </a>
+      </div>
+    </header>
+
+    <!-- Main -->
+    <main id="main" class="flex flex-col items-center justify-center min-h-[80vh] p-4">
+      <div id="mainContainer" class="bg-white rounded-2xl shadow-lg p-6 w-full max-w-md sm:max-w-lg md:max-w-xl lg:max-w-2xl">
+
+        <!-- User Type Buttons -->
+        <div class="flex flex-wrap justify-center gap-4 mb-4">
+          <button id="customerBtn" disabled class="px-4 py-2 rounded-lg bg-gray-200 text-gray-700 font-semibold flex-1 min-w-[120px] text-center">
+            Customer
+          </button>
+          <button id="courierBtn" disabled class="px-4 py-2 rounded-lg bg-gray-200 text-gray-700 font-semibold flex-1 min-w-[120px] text-center">
+            Courier
+          </button>
+        </div>
+
+        <!-- Tracking Input -->
+        <h2 class="text-lg font-semibold mb-4 text-gray-700 text-center">Enter Tracking ID</h2>
+        <div class="flex flex-wrap gap-2 mb-4">
+          <input id="trackingId" type="text" placeholder="Enter Tracking Number" class="flex-1 min-w-[200px] border rounded-lg px-3 py-2 focus:ring-2 focus:ring-red-400 outline-none">
+          <button id="updateBtn" onclick="trackParcel()" class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition flex-1 min-w-[100px]">
+            Track
+          </button>
+        </div>
+
+        <!-- Parcel Information -->
+        <div id="result" class="mt-6 hidden">
+
+          <!-- Customer View -->
+<div id="customerInfo" class="hidden">
+  <div class="flex justify-between items-center mb-2">
+    <p><strong>Parcel Name:</strong> <span id="parcelName"></span></p>
+    <button id="toggleCustomerDetails" class="bg-blue-600 text-white px-2 py-1 rounded text-sm">
+      Show Details
+    </button>
+  </div>
+  
+  <div id="customerDetails" class="hidden p-2 bg-gray-50 rounded">
+    <div class="flex flex-col sm:flex-row gap-4">
+      <div class="flex-1 bg-gray-100 p-4 rounded-lg shadow">
+        <h4 class="font-semibold mb-2 text-gray-700">Sender</h4>
+        <p><strong>Name:</strong> <span id="sender"></span></p>
+        <p><strong>Address:</strong> <span id="senderAddress"></span></p>
+        <p><strong>Contact:</strong> <span id="senderContact"></span></p>
+        <p><strong>Email:</strong> <span id="senderEmail"></span></p>
+      </div>
+      <div class="flex-1 bg-gray-100 p-4 rounded-lg shadow">
+        <h4 class="font-semibold mb-2 text-gray-700">Receiver</h4>
+        <p><strong>Name:</strong> <span id="receiver"></span></p>
+        <p><strong>Address:</strong> <span id="receiverAddress"></span></p>
+        <p><strong>Contact:</strong> <span id="receiverContact"></span></p>
+        <p><strong>Email:</strong> <span id="receiverEmail"></span></p>
+      </div>
+    </div>
+    <div class="mt-4">
+      <p><strong>Status:</strong> <span id="status"></span></p>
+    </div>
+  </div>
+</div>
+
+
+  <!-- Courier Actions -->
+  <div id="courierInfo" class="flex flex-col bg-green-100 p-4 rounded-lg shadow mb-4 hidden">
+    <h4 class="font-semibold mb-2 text-gray-700">Courier Actions</h4>
+    <div id="geoToggleContainer" class="flex items-center gap-2 mb-2" style="display:none;">
+      <label for="geoToggle">Enable Live Location</label>
+      <input type="checkbox" id="geoToggle">
+    </div>
+    <label class="mb-2 block">
+      Status:
+      <select id="parcelStatus" class="border px-2 py-1 rounded w-full sm:w-auto">
+        <option value="Pending">Pending</option>
+        <option value="In Transit">In Transit</option>
+        <option value="Out for Delivery">Out for Delivery</option>
+        <option value="Delivered">Delivered</option>
+        <option value="Cancelled">Cancelled</option>
+      </select>
+    </label>
+    <div class="flex flex-wrap gap-2 mb-2">
+      <input type="number" id="parcelLat" placeholder="Latitude" step="0.000001" class="flex-1 min-w-[120px] border px-2 py-1 rounded">
+      <input type="number" id="parcelLng" placeholder="Longitude" step="0.000001" class="flex-1 min-w-[120px] border px-2 py-1 rounded">
+    </div>
+    <button id="updateStatusBtn" class="bg-gray-700 text-white px-3 py-1 rounded-lg w-full sm:w-auto">
+      Update Parcel
+    </button>
+  </div>
+
+  <!-- Courier Parcel List -->
+  <div id="parcelList" class="mt-4"></div>
+
+  <!-- Map -->
+  <div id="map" class="mt-4 w-full max-w-full h-64 sm:h-80 rounded-lg"></div>
+
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script src="main.js"></script>
+
+</body>
+</html>
